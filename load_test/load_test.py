@@ -1,9 +1,6 @@
-from twisted.internet import reactor
-from user_protocol import EchoFactory
-
-kPort = 8000
+from app import App
 
 if __name__ == '__main__':
-    print("echo server")
-    reactor.listenTCP(kPort, EchoFactory())
-    reactor.run()
+    # 加载配置文件
+    the_app = App()
+    the_app.run()

@@ -7,4 +7,6 @@ class Client :
         return self.addr
 
     def process_cmd(self, cmd,cmd_info):
-        print(cmd)
+        print("cmd is : "+cmd)
+        print("cmd_info is : "+ str(cmd_info))
+
