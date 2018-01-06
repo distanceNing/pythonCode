@@ -18,14 +18,14 @@ class DBMethods:
         self.dbName = sql_config["db_name"]
     
     def connectMysql(self):
-        conn=pymysql.connect(host=self.HOST, user=self.USER, passwd=self.PASSWD, db=self.dbName, port=self.PORT, charset="utf8")
+        conn = pymysql.connect(host=self.HOST, user=self.USER, passwd=self.PASSWD, db=self.dbName, port=self.PORT, charset="utf8")
         return conn
 
 
     def selectMethods(self, dbStr, num=-1): #执行数据库查询工作
         retData = None
         conn = self.connectMysql()
-        cur=conn.cursor()
+        cur = conn.cursor()
         cur.execute(dbStr)
         if num == -1:
             retData = cur.fetchall()

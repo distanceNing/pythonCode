@@ -57,7 +57,7 @@ class Client:
         self.__user_no = None
         self.__response = ""
         self.__status = ""
-        self.user_addr = addr
+        self.user_addr = None
         self.process_state = kProccessState.kAuthing
         self.__kw_file = None
         self.recv_file_name = None
@@ -83,7 +83,7 @@ class Client:
                 return False
             else:
                 if len(text.split('\n')) == 4:
-                    user_no, user_pas, user_mac, user_ip = text.split('\n')
+                    user_no, user_pas, user_mac, self.user_addr = text.split('\n')
                 else:
                     self.__response = "NEED FOUR ARGUMENTS:userno userpassword usermac userip"
                     return False
@@ -111,10 +111,12 @@ class Client:
             if identify_usermac(user_no, user_mac):
                 log("%s LOGIN" % user_no)
                 self.__response = kOK
+                self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
                 # self.set_user_no(user_no)
                 # self.__user_socket.set_hostIP(user_ip)
+                self.insert_user_info()
                 return True
             else:
                 log("[login filed] userNo [%s] invalid usermac [%s]" % (user_no, user_mac))
@@ -190,20 +192,18 @@ class Client:
 
     def process_cmd(self, cmd, cmd_info):
 
-        if "RPL" == cmd:
+        if "ATH" == cmd:
             if self.process_state == kProccessState.kAuthing:
                 # 认证成功
-                if self.auth(cmd_info):
-                    self.insert_user_info()
-                else:
-                    self.process_state = kProccessState.kAuthFail
+                self.auth(cmd_info)
             elif self.process_state == kProccessState.kNeedRegister:
                 # 注册成功
                 if self.register(cmd_info):
                     self.insert_user_info()
                 else:
                     self.process_state = kProccessState.kAuthFail
-            elif self.process_state == kProccessState.kNeedFileHash:
+        elif "RPL" == cmd:
+            if self.process_state == kProccessState.kNeedFileHash:
                 self.check_upload_existed(cmd_info, self.recv_file_arg)
             elif self.process_state == kProccessState.kNeedFileInfo:
                 self.send_upload_num(cmd_info, self.recv_file_arg)
@@ -219,12 +219,13 @@ class Client:
             log("%s %s OFFLINE" % (self.__user_no, self.user_addr))
             remove_from_alive(self.get_user_no())
             close_conn(self.get_user_no())
-            self.process_state.kEndConnecion
+            self.process_state = kProccessState.kEndConnecion
             # 记录异常
         elif "LOG" == cmd:
             curt_time = get_curtime()
             record_warnings(cmd_info, self.__user_no, curt_time)
             log(cmd_info, self.__user_no, curt_time)
+            self.__response = kOK
         # 接受用户报警文件
         elif "UPD" == cmd:
             self.recv_file_arg = None
@@ -252,6 +253,7 @@ class Client:
         # 与客户端保持心跳
         elif "HBT" == cmd:
             self.__response = kHbt
+            self.process_state = kProccessState.kHbt
         # 处理由web下发的命令
         # if 'uninstall' == self.check_remote_task():
         #    log("%s %s UNINSTALL" % (self.__user_no, self.get_addr()))
@@ -260,7 +262,7 @@ class Client:
 
     # 接收客户端文件
     def recv_file(self, file_info):
-        self.process_state == kProccessState.kRecvFile
+        self.process_state = kProccessState.kRecvFile
         if not os.path.exists(FILE_KEEP_DIR):
             log("MKDIRS ", FILE_KEEP_DIR)
             os.makedirs(FILE_KEEP_DIR)
@@ -287,7 +289,7 @@ class Client:
     # 只是共用这个传输信道而已
 
     def check_upload_existed(self, file_hash, args):
-        self.process_state == kProccessState.kRecvFileHash
+        self.process_state = kProccessState.kRecvFileHash
         if self.recv_file_type == FILE_TYPE.confidential:
             # 检查当前内容的文件是否已经保存在本地
             check_result = is_hash_here(file_hash)

@@ -7,7 +7,7 @@ from twisted.internet.protocol import Protocol
 from client import kProccessState
 from client import Client
 from common import MAX_PACKET_SIZE, cal_file_hash
-from mylog import xtrace, SOCKET_OUT, log
+from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log
 
 HEAD_FORMAT = "!3sI"
 HEAD_SIZE = 7
@@ -16,9 +16,7 @@ HEAD_SIZE = 7
 class kTransFileState(Enum):
     kSendFileHash = 10001
     kNoFile = 10002
-    kSendDone = 10003
     kSendFail = 10004
-
 
 
 # 这个类类似于muduo中的TcpConnection
@@ -37,20 +35,18 @@ class UserProtocol(Protocol):
     def send_info(self, kind, info):
         if info == "":
             return 0
-        assert self.__connected
+        # assert self.__connected
         xtrace("%s [%s] %s %s" % (SOCKET_OUT, self.client.get_user_no(), kind, info))
 
         buf = info.encode()
         rest_size = len(buf)
         buf = struct.pack(HEAD_FORMAT, kind.encode(), rest_size) + buf
-        try:
-            ret = self.transport.write(buf)
-        except Exception:
-            ret = -1
-        return ret > 0
+        self.transport.write(buf)
 
     def reply_client(self):
-        return self.send_info("RPL", self.client.get_response())
+        responses = self.client.get_response().split('\n')
+        for response in responses:
+            self.send_info("RPL", response)
 
     def connectionMade(self):
         # 发送认证消息
@@ -61,15 +57,16 @@ class UserProtocol(Protocol):
 
     def connectionLost(self, reason):
         print("a connection closed" + str(self.client.get_user_no()))
-        self.factory.delete_client(self)
+
+    #    self.factory.delete_client(self)
 
 
     # clientReadCallBack()
     def dataReceived(self, data):
-
+        print(data)
         # 定义一个状态机来做协议解析
         cmd, cmd_info = self.do_parse_request(data)
-
+        xtrace("%s [%s] %s %s" % (SOCKET_IN, self.client.get_user_no(), cmd, cmd_info))
         # 当发送完文件Hash之后，获取到客户端的回复（客户端是否存在文件），继而发送文件
         if self.transfile_state == kTransFileState.kSendFileHash:
             self.send_file(self.client.get_kw_filename(), cmd_info)
@@ -82,7 +79,7 @@ class UserProtocol(Protocol):
 
         # 根据处理结果做点事情
         # 如果处理结果是认证失败或需关闭与客户端连接
-        if result == kProccessState.kAuthFail | result == kProccessState.kEndConnecion:
+        if result == kProccessState.kAuthFail or result == kProccessState.kEndConnecion:
             self.end_connection()
             # 成功写入关键字文件，需要network接口层发送文件
         elif result == kProccessState.kMakeKwSuccess:
@@ -98,7 +95,7 @@ class UserProtocol(Protocol):
         except Exception as error:
             print(error)
         cmd = rpl.decode()
-        cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size]
+        cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size].decode()
         return cmd, cmd_info
 
     def send_file(self, local_file, info=None):
@@ -133,7 +130,7 @@ class UserProtocol(Protocol):
                     self.transfile_state = kTransFileState.kSendFail
                     return False
                 log("send Keywords Done")
-                self.transfile_state = kTransFileState.kSendDone
+            self.transfile_state = kTransFileState.kNoFile
         return True
 
     def is_connected(self):
