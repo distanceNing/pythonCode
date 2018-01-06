@@ -57,7 +57,7 @@ class Client:
         self.__user_no = None
         self.__response = ""
         self.__status = ""
-        self.user_addr = addr
+        self.user_addr = None
         self.process_state = kProccessState.kAuthing
         self.__kw_file = None
         self.recv_file_name = None
@@ -83,7 +83,7 @@ class Client:
                 return False
             else:
                 if len(text.split('\n')) == 4:
-                    user_no, user_pas, user_mac, user_ip = text.split('\n')
+                    user_no, user_pas, user_mac, self.user_addr = text.split('\n')
                 else:
                     self.__response = "NEED FOUR ARGUMENTS:userno userpassword usermac userip"
                     return False
@@ -111,10 +111,10 @@ class Client:
             if identify_usermac(user_no, user_mac):
                 log("%s LOGIN" % user_no)
                 self.__response = kOK
+                self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
-                # self.set_user_no(user_no)
-                # self.__user_socket.set_hostIP(user_ip)
+                self.insert_user_info()
                 return True
             else:
                 log("[login filed] userNo [%s] invalid usermac [%s]" % (user_no, user_mac))
@@ -192,11 +192,8 @@ class Client:
 
         if "RPL" == cmd:
             if self.process_state == kProccessState.kAuthing:
-                # 认证成功
-                if self.auth(cmd_info):
-                    self.insert_user_info()
-                else:
-                    self.process_state = kProccessState.kAuthFail
+                self.auth(cmd_info)
+
             elif self.process_state == kProccessState.kNeedRegister:
                 # 注册成功
                 if self.register(cmd_info):
@@ -219,12 +216,13 @@ class Client:
             log("%s %s OFFLINE" % (self.__user_no, self.user_addr))
             remove_from_alive(self.get_user_no())
             close_conn(self.get_user_no())
-            self.process_state.kEndConnecion
+            self.process_state = kProccessState.kEndConnecion
             # 记录异常
         elif "LOG" == cmd:
             curt_time = get_curtime()
             record_warnings(cmd_info, self.__user_no, curt_time)
             log(cmd_info, self.__user_no, curt_time)
+            self.__response = kOK
         # 接受用户报警文件
         elif "UPD" == cmd:
             self.recv_file_arg = None
@@ -260,7 +258,7 @@ class Client:
 
     # 接收客户端文件
     def recv_file(self, file_info):
-        self.process_state == kProccessState.kRecvFile
+        self.process_state = kProccessState.kRecvFile
         if not os.path.exists(FILE_KEEP_DIR):
             log("MKDIRS ", FILE_KEEP_DIR)
             os.makedirs(FILE_KEEP_DIR)
@@ -343,14 +341,14 @@ class Client:
         reply_info = "{EXEC_COUNT} {MAX_IN_QUEUE} {TASK_ID}".format(EXEC_COUNT=executing_count,
                                                                     MAX_IN_QUEUE=max_in_queue, TASK_ID=task_id)
         self.__response = reply_info
-        # 由服务端发起,终止会话命令
 
     '''
+    # 由服务端发起,终止会话命令
     def end_client_session(self):
         self.__user_socket.send_info("CTL", RemoteControl.CTL_END_SESSION, self.__user_no)
-
-        # 获取进程列表
-
+    '''
+    '''
+    # 获取进程列表
     def get_remote_processes(self):
         ret = ""
         self.__user_no.send_info("CTL", RemoteControl.CTL_PROCESS_LIST, self.__user_no)
@@ -366,9 +364,9 @@ class Client:
         else:
             print(details)
         return ret
-
-        # 终止远程进程
-        # klist 是一个远程进程序列号的列表,形如 [0, 1, 4 ...] 数字不需要有序
+    
+    # 终止远程进程
+    # klist 是一个远程进程序列号的列表,形如 [0, 1, 4 ...] 数字不需要有序
 
     def kill_remote_process(self, klist):
         count = len(klist)
@@ -390,7 +388,7 @@ class Client:
             err_reason = info
             return False, err_reason
     '''
-    '''
+
     # 处理由Web界面发送过来的远控命令
     def check_remote_task(self):
         user_no = self.__user_no
@@ -406,25 +404,20 @@ class Client:
             log("[%s] I get a task" % user_no)
             cmd = GLOBAL_REMOTE_CONTROL[seq]['cmd']
             '''
-    '''
             if cmd is RemoteControl.CTL_PROCESS_LIST:
                 app_codes = self.get_remote_processes()
                 GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
                 GLOBAL_REMOTE_CONTROL[seq]['rst'] = app_codes
                 print("Task done", app_codes)
-            
-           
+            '''
             # 统一提取任务参数
-            #args = GLOBAL_REMOTE_CONTROL[seq]['args']
-            
+            args = GLOBAL_REMOTE_CONTROL[seq]['args']
             # 关闭客户端进程
             '''
-    '''
             if cmd is RemoteControl.CTL_KILL_PROCESS:
                 self.kill_remote_process(args)
                 GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
             '''
-    '''
             # 用户自查
             if cmd is RemoteControl.CTL_SCAN_SELF:
                 log("GET-TASK args:", args)
@@ -460,18 +453,17 @@ class Client:
                 self.uninstall_client(args)
                 GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
                 return 'uninstall'
+
             '''
-    '''
             # 关闭客户端与Internet的连接
             elif cmd is RemoteControl.CTL_SHUT_NETWORK:
                 self.close_remote_network(args)
                 GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-            
+            '''
 
             # 向客户端派遣远程控制任务
             return True
-            '''
-    '''
+
     # 远程控制---关闭用户网络
     def close_remote_network(self, args=None):
         status = ["SHUT", "OPEN"]
@@ -588,8 +580,7 @@ class Client:
             log("UPLOAD_SECOND_SCAN_FILE %s OK" % self.__user_no)
 
         return True, info
-    '''
-    '''
+
     # 远程控制---卸载客户端
     def uninstall_client(self, args=None):
         log("[UNINSTALL CLIENT] {ARGS}".format(ARGS=args))
@@ -604,4 +595,3 @@ class Client:
         # 更改数据库相关状态位
         bll_set_uninstall_status(self.__user_no)
         return True, "OK"
-    '''

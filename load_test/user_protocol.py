@@ -16,9 +16,7 @@ HEAD_SIZE = 7
 class kTransFileState(Enum):
     kSendFileHash = 10001
     kNoFile = 10002
-    kSendDone = 10003
     kSendFail = 10004
-
 
 
 # 这个类类似于muduo中的TcpConnection
@@ -50,7 +48,9 @@ class UserProtocol(Protocol):
         return ret > 0
 
     def reply_client(self):
-        return self.send_info("RPL", self.client.get_response())
+        responses = self.client.get_response().split('\n')
+        for response in responses:
+            self.send_info("RPL", response)
 
     def connectionMade(self):
         # 发送认证消息
@@ -62,7 +62,6 @@ class UserProtocol(Protocol):
     def connectionLost(self, reason):
         print("a connection closed" + str(self.client.get_user_no()))
         self.factory.delete_client(self)
-
 
     # clientReadCallBack()
     def dataReceived(self, data):
@@ -82,7 +81,7 @@ class UserProtocol(Protocol):
 
         # 根据处理结果做点事情
         # 如果处理结果是认证失败或需关闭与客户端连接
-        if result == kProccessState.kAuthFail | result == kProccessState.kEndConnecion:
+        if result == kProccessState.kAuthFail or result == kProccessState.kEndConnecion:
             self.end_connection()
             # 成功写入关键字文件，需要network接口层发送文件
         elif result == kProccessState.kMakeKwSuccess:
@@ -99,6 +98,7 @@ class UserProtocol(Protocol):
             print(error)
         cmd = rpl.decode()
         cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size]
+
         return cmd, cmd_info
 
     def send_file(self, local_file, info=None):
@@ -111,6 +111,7 @@ class UserProtocol(Protocol):
             # 已发送完文件hash，客户端文件存在则不需要发送
             if "EXISTED" == info:
                 log("%s KEYWORDS IS UP-TO-DATE" % user_no)
+                self.transfile_state = kTransFileState.kNoFile
             else:
                 file_size = os.path.getsize(local_file)
                 # 发送文件大小
@@ -133,7 +134,7 @@ class UserProtocol(Protocol):
                     self.transfile_state = kTransFileState.kSendFail
                     return False
                 log("send Keywords Done")
-                self.transfile_state = kTransFileState.kSendDone
+                self.transfile_state = kTransFileState.kNoFile
         return True
 
     def is_connected(self):
