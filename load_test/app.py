@@ -10,7 +10,7 @@ from remote.remote_control import remote_event_loop
 from trans_file import UploadQueue
 from user_protocol import UserProtocol
 
-kPort = 8000
+kPort = 50005
 
 
 class EchoFactory(Factory):
@@ -24,11 +24,11 @@ class EchoFactory(Factory):
     def buildProtocol(self, addr):
         return UserProtocol(self, addr)
 
-    def add_client(self, client_protocol):
-        self.clients.append(client_protocol)
+    # def add_client(self, client_protocol):
+    #    self.clients.append(client_protocol)
 
-    def delete_client(self, client_protocol):
-        self.clients.remove(client_protocol)
+    # def delete_client(self, client_protocol):
+    #    self.clients.remove(client_protocol)
 
 
 class App:
@@ -56,3 +56,4 @@ class App:
         # 监听服务
         reactor.listenTCP(kPort, self.protocol_factory)
         reactor.run()
+        

@@ -153,7 +153,7 @@ class socket_method:
             return False
 
         while 1:
-            conn, adress = self.socket.accept()
+            conn, address = self.socket.accept()
 
             while 1:
                 length = self.recv_data(conn)
@@ -216,7 +216,7 @@ class socket_method:
                 else:
                     break
 
-            self.close_conn(conn, adress)
+            self.close_conn(conn, address)
 
 
 if __name__ == '__main__':

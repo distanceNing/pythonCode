@@ -24,13 +24,16 @@ from trans_file import erase_zombie_client, EXECUTING_QUEUE, UPLOAD_QUEUE, FIRST
 class kProccessState(Enum):
     kAuthing = 1
     kNeedRegister = 2
-    kHbt = 3
+    kAuthSuccess = 3
 
     kFirstScan = 10
     kSecondScan = 11
     kSelfScan = 12
     kMakeKwFail = 13
     kMakeKwSuccess = 14
+
+    kHbt = 33
+
     # 任务处理失败的情况，需关闭客户端的连接
     kAuthFail = 100
     kEndConnecion = 101
@@ -39,6 +42,8 @@ class kProccessState(Enum):
     kNeedFileHash = 10011
     kNeedFileInfo = 10012
     kRecvDone = 10013
+
+    kRemoteCtl = 10020
 
 
 kOK = "OK"
@@ -78,6 +83,7 @@ class Client:
 
     def auth(self, text):
         # 接收并解析用户发来的信息，进行身份认证
+        self.process_state=kProccessState.kAuthFail
         try:
             if text is None:
                 return False
@@ -114,6 +120,7 @@ class Client:
                 self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
+                self.process_state=kProccessState.kAuthSuccess
                 self.insert_user_info()
                 return True
             else:
@@ -124,7 +131,6 @@ class Client:
         elif not user_registed:
             self.__response = "NEED REGISTER"
             self.process_state = kProccessState.kNeedRegister
-
         # 用户身份不合法
         self.__response = "INVALID"
         return False
@@ -133,13 +139,14 @@ class Client:
         log("REGISTER ", self.__user_no)
         if register_user(self.__user_no, data):
             self.__response = kOK
+            self.__response += '\n'
             self.__response += UploadServerConfig
-            # 登录成功，保存用户身份
-            # self.set_user_no(user_no)
-            # self.__user_socket.set_hostIP(user_ip)
+            self.insert_user_info()
+            self.process_state = kProccessState.kAuthSuccess
             return True
         else:
             self.__response = kFail
+            self.process_state = kProccessState.kAuthFail
             return False
 
     def insert_user_info(self):
@@ -168,16 +175,16 @@ class Client:
     def send_keywords_file(self, file_type):
         file_state = self.make_keywords_file(file_type)
         if file_state == kFileState.kExisted:
-            # self.__user_socket.send_info("RPL", "OK", self.__user_no)
-            # self.__user_socket.send_file(self.__kw_file, self.__user_no)
-            return True
+            self.process_state = kProccessState.kMakeKwSuccess
+            self.__response = kOK
         else:
             log("client file %s not existed!" % self.__kw_file)
-            # self.__user_socket.send_info("RPL", "FAILED", self.__user_no)
-            return False
+            self.process_state = kProccessState.kMakeKwFail
+            self.__response = kFail
 
     def hbt(self):
         self.__response = kHbt
+        self.process_state = kProccessState.kHbt
 
     def scan(self, data):
         pass
@@ -188,36 +195,28 @@ class Client:
     def get_response(self):
         return self.__response
 
+    def client_offline(self):
+        log("%s %s OFFLINE" % (self.__user_no, self.user_addr))
+        remove_from_alive(self.get_user_no())
+        close_conn(self.get_user_no())
+        self.process_state = kProccessState.kEndConnecion
+
     def process_cmd(self, cmd, cmd_info):
-
         if "RPL" == cmd:
-            if self.process_state == kProccessState.kAuthing:
-                self.auth(cmd_info)
-
-            elif self.process_state == kProccessState.kNeedRegister:
-                # 注册成功
-                if self.register(cmd_info):
-                    self.insert_user_info()
-                else:
-                    self.process_state = kProccessState.kAuthFail
-            elif self.process_state == kProccessState.kNeedFileHash:
+            if self.process_state == kProccessState.kNeedFileHash:
                 self.check_upload_existed(cmd_info, self.recv_file_arg)
             elif self.process_state == kProccessState.kNeedFileInfo:
                 self.send_upload_num(cmd_info, self.recv_file_arg)
+            elif self.process_state == kProccessState.kNeedRegister:
+                # 注册成功
+                self.register(cmd_info)
+        elif "ATH" == cmd:
+            self.auth(cmd_info)
         elif "DNF" == cmd:
-            if not self.send_keywords_file(cmd_info):
-                # self.__user_socket.set_connecting(False)
-                self.process_state = kProccessState.kMakeKwFail
-                self.__response = kFail
-            else:
-                self.process_state = kProccessState.kMakeKwSuccess
-                self.__response = kOK
+            self.send_keywords_file(cmd_info)
         elif "END" == cmd:
-            log("%s %s OFFLINE" % (self.__user_no, self.user_addr))
-            remove_from_alive(self.get_user_no())
-            close_conn(self.get_user_no())
-            self.process_state = kProccessState.kEndConnecion
-            # 记录异常
+            self.client_offline()
+        # 记录异常
         elif "LOG" == cmd:
             curt_time = get_curtime()
             record_warnings(cmd_info, self.__user_no, curt_time)
@@ -249,7 +248,7 @@ class Client:
                 self.__response = get_expired_time()
         # 与客户端保持心跳
         elif "HBT" == cmd:
-            self.__response = kHbt
+            self.hbt()
         # 处理由web下发的命令
         # if 'uninstall' == self.check_remote_task():
         #    log("%s %s UNINSTALL" % (self.__user_no, self.get_addr()))
@@ -285,7 +284,7 @@ class Client:
     # 只是共用这个传输信道而已
 
     def check_upload_existed(self, file_hash, args):
-        self.process_state == kProccessState.kRecvFileHash
+        self.process_state = kProccessState.kRecvFileHash
         if self.recv_file_type == FILE_TYPE.confidential:
             # 检查当前内容的文件是否已经保存在本地
             check_result = is_hash_here(file_hash)
@@ -490,19 +489,19 @@ class Client:
         rst = None
         log("REMOTE-CMD: SCAN_REMOTE {ARGS}".format(ARGS=args))
         self.__user_socket.send_info("CTL", cmd, self.__user_no)
+        log("SCAN_SELF %s OK" % self.__user_no)
+        '''
         cmd, info = self.__user_socket.get_reply_info()
         if "DNF" == cmd:
             if not self.send_keywords_file(info):
-                self.__user_socket.set_connecting(False)
+                self.process_state=kProccessState.kEndConnecion
             rst, info = self.__user_socket.get_reply_info()
         if rst != RemoteControl.CTL_RPL_OK:
             err_reason = info
             log("SCAN_SELF %s FAILED" % self.__user_no)
             return False, err_reason
-
-        log("SCAN_SELF %s OK" % self.__user_no)
-
         return True, info
+        '''
 
     # 远程控制---全盘扫描用户文件
     def scan_remote_files(self, args=None):
@@ -553,6 +552,7 @@ class Client:
         elif status == SECOND_UPLOAD:
             cmd = RemoteControl.CTL_UPLOAD_SECOND + '#'
         log("REMOTE-CMD: UPLOAD_REMOTE {ARGS}".format(ARGS=args))
+        self.process_state = kProccessState.kRemoteCtl
         self.__user_socket.send_info("CTL", cmd, self.__user_no)
         cmd, info = self.__user_socket.get_reply_info()
         if "INF" == cmd:

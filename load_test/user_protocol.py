@@ -7,14 +7,15 @@ from twisted.internet.protocol import Protocol
 from client import kProccessState
 from client import Client
 from common import MAX_PACKET_SIZE, cal_file_hash
-from mylog import xtrace, SOCKET_OUT, log
+from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log
+from remote.remote_control import remove_from_alive
 
 HEAD_FORMAT = "!3sI"
 HEAD_SIZE = 7
 
 
 class kTransFileState(Enum):
-    kSendFileHash = 10001
+    kNeedFileHash = 10001
     kNoFile = 10002
     kSendFail = 10004
 
@@ -27,6 +28,7 @@ class UserProtocol(Protocol):
         self.transfile_state = kTransFileState.kNoFile
         self.recv_file_name = None
 
+    # 主动关闭套接字
     def end_connection(self):
         self.transport.loseConnection()
 
@@ -35,22 +37,21 @@ class UserProtocol(Protocol):
     def send_info(self, kind, info):
         if info == "":
             return 0
-        assert self.__connected
+        # assert self.__connected
         xtrace("%s [%s] %s %s" % (SOCKET_OUT, self.client.get_user_no(), kind, info))
 
         buf = info.encode()
         rest_size = len(buf)
         buf = struct.pack(HEAD_FORMAT, kind.encode(), rest_size) + buf
-        try:
-            ret = self.transport.write(buf)
-        except Exception:
-            ret = -1
-        return ret > 0
+        self.transport.write(buf)
 
     def reply_client(self):
         responses = self.client.get_response().split('\n')
         for response in responses:
             self.send_info("RPL", response)
+
+    def ctl_client(self):
+        self.send_info("CTL", self.client.get_response())
 
     def connectionMade(self):
         # 发送认证消息
@@ -59,24 +60,31 @@ class UserProtocol(Protocol):
     # 当一个客户端连接关闭的时候
     # clientCloseCallBack()
 
+    def get_host(self):
+        self.transport.getHost()
+
     def connectionLost(self, reason):
+        self.client.client_offline()
         print("a connection closed" + str(self.client.get_user_no()))
-        self.factory.delete_client(self)
+    #   self.factory.delete_client(self)
 
     # clientReadCallBack()
     def dataReceived(self, data):
-
+        print(data)
         # 定义一个状态机来做协议解析
         cmd, cmd_info = self.do_parse_request(data)
-
+        xtrace("%s [%s] %s %s" % (SOCKET_IN, self.client.get_user_no(), cmd, cmd_info))
         # 当发送完文件Hash之后，获取到客户端的回复（客户端是否存在文件），继而发送文件
-        if self.transfile_state == kTransFileState.kSendFileHash:
+        if self.transfile_state == kTransFileState.kNeedFileHash:
             self.send_file(self.client.get_kw_filename(), cmd_info)
             return
 
         result = self.client.process_cmd(cmd, cmd_info)
 
         # 业务逻辑处理完之后将处理结果发送给客户端
+        # if result == kProccessState.kRemoteCtl:
+        #    self.ctl_client()
+        # else:
         self.reply_client()
 
         # 根据处理结果做点事情
@@ -97,8 +105,8 @@ class UserProtocol(Protocol):
         except Exception as error:
             print(error)
         cmd = rpl.decode()
-        cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size]
 
+        cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size].decode()
         return cmd, cmd_info
 
     def send_file(self, local_file, info=None):
@@ -106,7 +114,7 @@ class UserProtocol(Protocol):
         user_no = self.client.get_user_no()
         if self.transfile_state == kTransFileState.kNoFile:
             self.send_info("RPL", cal_file_hash(local_file))
-            self.transfile_state = kTransFileState.kSendFileHash
+            self.transfile_state = kTransFileState.kNeedFileHash
         else:
             # 已发送完文件hash，客户端文件存在则不需要发送
             if "EXISTED" == info:
@@ -134,7 +142,9 @@ class UserProtocol(Protocol):
                     self.transfile_state = kTransFileState.kSendFail
                     return False
                 log("send Keywords Done")
-                self.transfile_state = kTransFileState.kNoFile
+
+            self.transfile_state = kTransFileState.kNoFile
+
         return True
 
     def is_connected(self):

@@ -139,7 +139,7 @@ def remote_event_loop():
                     commit_scan_files(data, user_no, 0)
                 elif cmd == RemoteControl.CTL_SCAN_SECOND:
                     commit_scan_files(data, user_no, 2)
-                log("[remote_event_loop] %s taskdone." % user_no)
+                log("[remote_event_loop] %s task done." % user_no)
                 print("status:", status, "TaskDone:", CommandStatus.TaskDone)
                 # 当任务运行成功后，则更新其状态
                 cancel_task(user_no)
