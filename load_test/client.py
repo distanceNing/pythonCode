@@ -9,7 +9,8 @@ from mylog import error_log, log, get_curtime
 
 from common import check_passwd, check_user_name, is_user_registed, identify_usermac, get_expired_time, register_user, \
     record_warnings, mk_keyWords_file, is_hash_here, \
-    log_file_upload, update_scan_data, update_second_scan_data, FILE_KEEP_DIR, CommandStatus
+    log_file_upload, update_scan_data, update_second_scan_data, FILE_KEEP_DIR, CommandStatus, update_scan_failed, \
+    update_scan_second_failed
 
 # config
 from config import UploadServerConfig, FILE_TYPE, MAP_TYPE
@@ -117,24 +118,23 @@ class Client:
                 log("SECOND_SCAN_FILE %s OK" % self.__user_no)
             GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
             GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-        elif cmd is RemoteControl.CTL_UPLOAD_FIRST:
+        elif cmd is RemoteControl.CTL_UPLOAD_SECOND or cmd is RemoteControl.CTL_UPLOAD_FIRST:
             if rst != RemoteControl.CTL_RPL_OK:
-                log("UPLOAD_FIRST %s FAILED" % self.__user_no)
-            else:
-                log("UPLOAD_FIRST %s OK" % self.__user_no)
-            GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
-            GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-        elif cmd is RemoteControl.CTL_UPLOAD_SECOND:
-            if rst != RemoteControl.CTL_RPL_OK:
-                log("UPLOAD_SECOND %s FAILED" % self.__user_no)
-            else:
-                log("UPLOAD_SECOND %s OK" % self.__user_no)
-            log("UPLOAD_SECOND_SCAN_FILE %s OK" % self.__user_no)
+                if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
+                    log("UPLOAD_FIRST_SCAN_FILE %s FAILED" % self.__user_no)
+                    update_scan_failed(self.__ctl_args)
+                elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+                    log("UPLOAD_SECOND_SCAN_FILE %s FAILED" % self.__user_no)
+                    update_scan_second_failed(self.__ctl_args)
+            if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
+                log("UPLOAD_FIRST_SCAN_FILE %s OK" % self.__user_no)
+            elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+                log("UPLOAD_SECOND_SCAN_FILE %s OK" % self.__user_no)
             GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
             GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
         elif cmd is RemoteControl.CTL_UNINSTALL:
             GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-
+            self.client_offline()
         self.__ctl_status = RemoteControl.CTL_NO_TASK
 
     def auth(self, text):
