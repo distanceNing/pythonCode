@@ -4,14 +4,12 @@ import os
 
 from BLL.close_conn import close_conn
 from BLL.getData import get_keywords, get_first_upload_file_info, get_second_upload_file_info
-from BLL.setData import bll_set_uninstall_status
 from BLL.userLogin import set_user_login
 from mylog import error_log, log, get_curtime
 
 from common import check_passwd, check_user_name, is_user_registed, identify_usermac, get_expired_time, register_user, \
     record_warnings, mk_keyWords_file, is_hash_here, \
-    log_file_upload, update_scan_data, update_second_scan_data, FILE_KEEP_DIR, CommandStatus, update_scan_failed, \
-    update_scan_second_failed
+    log_file_upload, update_scan_data, update_second_scan_data, FILE_KEEP_DIR, CommandStatus
 
 # config
 from config import UploadServerConfig, FILE_TYPE, MAP_TYPE
@@ -44,6 +42,7 @@ class kProccessState(Enum):
     kRecvDone = 10013
 
     kRemoteCtl = 10020
+    kUploadFile = 10021
 
 
 kOK = "OK"
@@ -61,7 +60,7 @@ class Client:
     def __init__(self, addr):
         self.__user_no = None
         self.__response = ""
-        self.__status = ""
+        self.__ctl_status = ""
         self.user_addr = None
         self.process_state = kProccessState.kAuthing
         self.__kw_file = None
@@ -70,10 +69,34 @@ class Client:
         self.recv_file_path = None
         self.recv_file_hash = None
         self.recv_file_arg = None
+        self.__ctl_args = None
         self.current_time = get_curtime()
 
-    def get_status(self):
-        return self.__status
+    def get_ctl_status(self):
+        return self.__ctl_status
+
+    def set_ctl_status(self, cmd, args):
+        if self.__ctl_status != RemoteControl.CTL_NO_TASK :
+            return False
+        self.__ctl_status = cmd
+        self.__ctl_args = args
+        # 打印log
+        log("GET-TASK args:", args)
+        if cmd is RemoteControl.CTL_SCAN_FILES:
+            log("REMOTE-CMD: SCAN_FILES {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_SCAN_SECOND:
+            log("REMOTE-CMD: SCAN_SECOND {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_SCAN_SELF:
+            log("REMOTE-CMD: SCAN_SELF {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_UPLOAD_FIRST:
+            log("REMOTE-CMD: UPLOAD_FIRST {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_UPLOAD_SECOND:
+            log("REMOTE-CMD: UPLOAD_SECOND {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_UNINSTALL:
+            log("[UNINSTALL CLIENT] {ARGS}".format(ARGS=args))
+        elif cmd is RemoteControl.CTL_SHUT_NETWORK:
+            log("REMOTE-CMD: SHUT_NETWORK {ARGS}".format(ARGS=args))
+        return  True
 
     def get_user_no(self):
         return self.__user_no
@@ -81,9 +104,42 @@ class Client:
     def get_kw_filename(self):
         return self.__kw_file
 
+    def update_task_state(self, rst, info):
+        seq = self.__user_no
+        cmd = self.__ctl_status
+
+        if cmd is RemoteControl.CTL_SCAN_SELF or cmd is RemoteControl.CTL_SCAN_FILES or \
+                cmd is RemoteControl.CTL_SCAN_SECOND:
+            # 更新任务执行状态: 成功、失败、正在执行中
+            if rst != RemoteControl.CTL_RPL_OK:
+                log("SECOND_SCAN_FILE %s FAILED" % self.__user_no)
+            else:
+                log("SECOND_SCAN_FILE %s OK" % self.__user_no)
+            GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
+            GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
+        elif cmd is RemoteControl.CTL_UPLOAD_FIRST:
+            if rst != RemoteControl.CTL_RPL_OK:
+                log("UPLOAD_FIRST %s FAILED" % self.__user_no)
+            else:
+                log("UPLOAD_FIRST %s OK" % self.__user_no)
+            GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
+            GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
+        elif cmd is RemoteControl.CTL_UPLOAD_SECOND:
+            if rst != RemoteControl.CTL_RPL_OK:
+                log("UPLOAD_SECOND %s FAILED" % self.__user_no)
+            else:
+                log("UPLOAD_SECOND %s OK" % self.__user_no)
+            log("UPLOAD_SECOND_SCAN_FILE %s OK" % self.__user_no)
+            GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
+            GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
+        elif cmd is RemoteControl.CTL_UNINSTALL:
+            GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
+
+        self.__ctl_status = RemoteControl.CTL_NO_TASK
+
     def auth(self, text):
         # 接收并解析用户发来的信息，进行身份认证
-        self.process_state=kProccessState.kAuthFail
+        self.process_state = kProccessState.kAuthFail
         try:
             if text is None:
                 return False
@@ -120,7 +176,7 @@ class Client:
                 self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
-                self.process_state=kProccessState.kAuthSuccess
+                self.process_state = kProccessState.kAuthSuccess
                 self.insert_user_info()
                 return True
             else:
@@ -210,6 +266,9 @@ class Client:
             elif self.process_state == kProccessState.kNeedRegister:
                 # 注册成功
                 self.register(cmd_info)
+        # 远程控制执行成功，更新状态位
+        elif RemoteControl.CTL_RPL_OK == cmd or RemoteControl.CTL_RPL_FAILED == cmd:
+            self.update_task_state(cmd, cmd_info)
         elif "ATH" == cmd:
             self.auth(cmd_info)
         elif "DNF" == cmd:
@@ -239,7 +298,12 @@ class Client:
             self.recv_file_arg = SECOND_UPLOAD
             self.current_time = get_curtime()
             self.recv_file(cmd_info)
-
+        elif "INF" == cmd:
+            if self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+                self.__response = get_first_upload_file_info(self.__ctl_args)
+            elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+                self.__response = get_second_upload_file_info(self.__ctl_args)
+            self.process_state = kProccessState.kUploadFile
         # 询问服务器时间和服务器过期时间
         elif "TIM" == cmd:
             if "CTM" == cmd_info:
@@ -249,10 +313,6 @@ class Client:
         # 与客户端保持心跳
         elif "HBT" == cmd:
             self.hbt()
-        # 处理由web下发的命令
-        # if 'uninstall' == self.check_remote_task():
-        #    log("%s %s UNINSTALL" % (self.__user_no, self.get_addr()))
-
         return self.process_state
 
     # 接收客户端文件
@@ -282,7 +342,6 @@ class Client:
     # 仅当上传文件为 ‘涉密文件’时才检查hash
     # 因为hash保存在数据库中，对于“文件扫描结果”我们不保存它的哈希
     # 只是共用这个传输信道而已
-
     def check_upload_existed(self, file_hash, args):
         self.process_state = kProccessState.kRecvFileHash
         if self.recv_file_type == FILE_TYPE.confidential:
@@ -340,258 +399,3 @@ class Client:
         reply_info = "{EXEC_COUNT} {MAX_IN_QUEUE} {TASK_ID}".format(EXEC_COUNT=executing_count,
                                                                     MAX_IN_QUEUE=max_in_queue, TASK_ID=task_id)
         self.__response = reply_info
-
-    '''
-    # 由服务端发起,终止会话命令
-    def end_client_session(self):
-        self.__user_socket.send_info("CTL", RemoteControl.CTL_END_SESSION, self.__user_no)
-    '''
-    '''
-    # 获取进程列表
-    def get_remote_processes(self):
-        ret = ""
-        self.__user_no.send_info("CTL", RemoteControl.CTL_PROCESS_LIST, self.__user_no)
-        rpl, details = self.__user_no.get_reply_info()
-        if rpl == RemoteControl.CTL_RPL_OK:
-            plst = details.strip().split('\n')[1:]
-            rst = []
-            for pro in plst:
-                sq, app_code = pro.split('-')
-                # 根据进程编码获取进程名
-                rst.append(app_code)
-            ret = ','.join(rst)
-        else:
-            print(details)
-        return ret
-    
-    # 终止远程进程
-    # klist 是一个远程进程序列号的列表,形如 [0, 1, 4 ...] 数字不需要有序
-
-    def kill_remote_process(self, klist):
-        count = len(klist)
-        if count <= 0:
-            return False
-
-        cmd = RemoteControl.CTL_KILL_PROCESS + '#'
-        cmd += (str(count) + '\n')
-
-        plist = '\n'.join(klist)  # 以回车符分割进程序列号
-        cmd += plist  # 构造终止指定进程的命令
-
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)  # 发送控制命令
-        rst, info = self.__user_socket.get_reply_info()
-        if rst == RemoteControl.CTL_RPL_OK:
-            success_killed = info.strip().split('\n')
-            return True, success_killed
-        else:
-            err_reason = info
-            return False, err_reason
-    '''
-
-    # 处理由Web界面发送过来的远控命令
-    def check_remote_task(self):
-        user_no = self.__user_no
-        seq = self.__user_no
-        # 非法客户标识
-        if GLOBAL_REMOTE_CONTROL.get(seq) is None:
-            return False
-        # 当前没有任务
-        if GLOBAL_REMOTE_CONTROL[seq]['status'] is CommandStatus.NO_TASK:
-            return False
-        # 当前有任务
-        elif GLOBAL_REMOTE_CONTROL[seq]['status'] is CommandStatus.NEW_TASK:
-            log("[%s] I get a task" % user_no)
-            cmd = GLOBAL_REMOTE_CONTROL[seq]['cmd']
-            '''
-            if cmd is RemoteControl.CTL_PROCESS_LIST:
-                app_codes = self.get_remote_processes()
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = app_codes
-                print("Task done", app_codes)
-            '''
-            # 统一提取任务参数
-            args = GLOBAL_REMOTE_CONTROL[seq]['args']
-            # 关闭客户端进程
-            '''
-            if cmd is RemoteControl.CTL_KILL_PROCESS:
-                self.kill_remote_process(args)
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-            '''
-            # 用户自查
-            if cmd is RemoteControl.CTL_SCAN_SELF:
-                log("GET-TASK args:", args)
-                ret, rst = self.scan_self_files(args)
-                # 更新任务执行状态: 成功、失败、正在执行中
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-            # 扫描客户端文件
-            elif cmd is RemoteControl.CTL_SCAN_FILES:
-                log("GET-TASK args:", args)
-                ret, rst = self.scan_remote_files(args)
-                # 更新任务执行状态: 成功、失败、正在执行中
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-            # 二次扫描客户端
-            elif cmd is RemoteControl.CTL_SCAN_SECOND:
-                log("GET-TASK args:", args)
-                ret, rst = self.second_scan_remote_files(args)
-                # 更新任务执行状态: 成功、失败、正在执行中
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-            elif cmd is RemoteControl.CTL_UPLOAD_FIRST:
-                log("GET-TASK args:", args)
-                ret, rst = self.upload_remote_files(args, 1)
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-            elif cmd is RemoteControl.CTL_UPLOAD_SECOND:
-                log("GET-TASK args:", args)
-                ret, rst = self.upload_remote_files(args, 2)
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.NO_TASK
-                GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
-            elif cmd is RemoteControl.CTL_UNINSTALL:
-                self.uninstall_client(args)
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-                return 'uninstall'
-
-            '''
-            # 关闭客户端与Internet的连接
-            elif cmd is RemoteControl.CTL_SHUT_NETWORK:
-                self.close_remote_network(args)
-                GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
-            '''
-
-            # 向客户端派遣远程控制任务
-            return True
-
-    # 远程控制---关闭用户网络
-    def close_remote_network(self, args=None):
-        status = ["SHUT", "OPEN"]
-        # 如果传来的参数不支持，则直接返回
-        if args not in status:
-            return False
-
-        # 构造命令参数：关闭网络，还是打开网络
-        cmd = RemoteControl.CTL_SHUT_NETWORK + '#'
-        cmd += args
-
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        rst, info = self.__user_socket.get_reply_info()
-
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            return False, err_reason
-
-        return True, "OK"
-
-    # 远程控制---用户自查
-    def scan_self_files(self, args=None):
-        cmd = RemoteControl.CTL_SCAN_SELF + '#'
-        rst = None
-        log("REMOTE-CMD: SCAN_REMOTE {ARGS}".format(ARGS=args))
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        log("SCAN_SELF %s OK" % self.__user_no)
-        '''
-        cmd, info = self.__user_socket.get_reply_info()
-        if "DNF" == cmd:
-            if not self.send_keywords_file(info):
-                self.process_state=kProccessState.kEndConnecion
-            rst, info = self.__user_socket.get_reply_info()
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            log("SCAN_SELF %s FAILED" % self.__user_no)
-            return False, err_reason
-        return True, info
-        '''
-
-    # 远程控制---全盘扫描用户文件
-    def scan_remote_files(self, args=None):
-        cmd = RemoteControl.CTL_SCAN_FILES + '#'
-        rst = None
-        log("REMOTE-CMD: SCAN_REMOTE {ARGS}".format(ARGS=args))
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        cmd, info = self.__user_socket.get_reply_info()
-        if "DNF" == cmd:
-            if not self.send_keywords_file(info):
-                self.__user_socket.set_connecting(False)
-            rst, info = self.__user_socket.get_reply_info()
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            log("SCAN_FILE %s FAILED" % self.__user_no)
-            return False, err_reason
-
-        log("SCAN_FILE %s OK" % self.__user_no)
-
-        return True, info
-
-    # 远程控制---快速扫描客户端
-    def second_scan_remote_files(self, args=None):
-        cmd = RemoteControl.CTL_SCAN_SECOND + '#'
-        rst = None
-        log("REMOTE-CMD: SCAN_REMOTE {ARGS}".format(ARGS=args))
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        cmd, info = self.__user_socket.get_reply_info()
-        if "DNF" == cmd:
-            # info 为客户端请求下载的文件类型
-            if not self.send_keywords_file(info):
-                self.__user_socket.set_connecting(False)
-            rst, info = self.__user_socket.get_reply_info()
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            log("SECOND_SCAN_FILE %s FAILED" % self.__user_no)
-            return False, err_reason
-
-        log("SECOND_SCAN_FILE %s OK" % self.__user_no)
-
-        return True, info
-
-    def upload_remote_files(self, args=None, status=None):
-        cmd = None
-        rst = None
-        if status == FIRST_UPLOAD:
-            cmd = RemoteControl.CTL_UPLOAD_FIRST + '#'
-        elif status == SECOND_UPLOAD:
-            cmd = RemoteControl.CTL_UPLOAD_SECOND + '#'
-        log("REMOTE-CMD: UPLOAD_REMOTE {ARGS}".format(ARGS=args))
-        self.process_state = kProccessState.kRemoteCtl
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        cmd, info = self.__user_socket.get_reply_info()
-        if "INF" == cmd:
-            # 获取上传文件在客户端中的路径
-            if status == FIRST_UPLOAD:
-                upload_file_info = get_first_upload_file_info(args)
-            elif status == SECOND_UPLOAD:
-                upload_file_info = get_second_upload_file_info(args)
-            self.__user_socket.send_info("PAT", upload_file_info, self.__user_no)
-            rst, info = self.__user_socket.get_reply_info()
-
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            if status == FIRST_UPLOAD:
-                log("UPLOAD_FIRST_SCAN_FILE %s FAILED" % self.__user_no)
-                update_scan_failed(args)
-            elif status == SECOND_UPLOAD:
-                log("UPLOAD_SECOND_SCAN_FILE %s FAILED" % self.__user_no)
-                update_scan_second_failed(args)
-            return False, err_reason
-
-        if status == FIRST_UPLOAD:
-            log("UPLOAD_FIRST_SCAN_FILE %s OK" % self.__user_no)
-        elif status == SECOND_UPLOAD:
-            log("UPLOAD_SECOND_SCAN_FILE %s OK" % self.__user_no)
-
-        return True, info
-
-    # 远程控制---卸载客户端
-    def uninstall_client(self, args=None):
-        log("[UNINSTALL CLIENT] {ARGS}".format(ARGS=args))
-        cmd = RemoteControl.CTL_UNINSTALL + '#'
-
-        # 发送控制命令
-        self.__user_socket.send_info("CTL", cmd, self.__user_no)
-        rst, info = self.__user_socket.get_reply_info()
-        if rst != RemoteControl.CTL_RPL_OK:
-            err_reason = info
-            return False, err_reason
-        # 更改数据库相关状态位
-        bll_set_uninstall_status(self.__user_no)
-        return True, "OK"

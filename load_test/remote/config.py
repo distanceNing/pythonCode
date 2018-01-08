@@ -28,6 +28,8 @@ class RemoteControl:
     CTL_UPLOAD_FIRST = "007"
     CTL_UPLOAD_SECOND = "008"
     CTL_SCAN_SELF = "009"
+    CTL_NO_TASK = "010"
+
     CTL_RPL_OK = "COK"
     CTL_RPL_FAILED = "CNO"
 

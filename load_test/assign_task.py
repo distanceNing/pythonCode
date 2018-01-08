@@ -75,6 +75,7 @@ def oprate_data_sacnf(method, thing, userNo):
 
 # 远程控制--->卸载客户端
 def oprate_client_uninstall(method, thing, userNo):
+    ret =None
     if method == "REMOVE" and thing == "SELF":
         ret = "OK"
         assign_remote_task(userNo, CMD_TYPE.CTL_UNINSTALL, "CLIENT-UNINSTALL")

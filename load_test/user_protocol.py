@@ -8,17 +8,14 @@ from client import kProccessState
 from client import Client
 from common import MAX_PACKET_SIZE, cal_file_hash
 from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log
-from remote.remote_control import remove_from_alive
 
 HEAD_FORMAT = "!3sI"
 HEAD_SIZE = 7
-
 
 class kTransFileState(Enum):
     kNeedFileHash = 10001
     kNoFile = 10002
     kSendFail = 10004
-
 
 # 这个类类似于muduo中的TcpConnection
 class UserProtocol(Protocol):
@@ -31,15 +28,12 @@ class UserProtocol(Protocol):
     # 主动关闭套接字
     def end_connection(self):
         self.transport.loseConnection()
+        self.factory.delete_client(self.client.get_user_no())
 
     # 当一个客户端连接到来的时候
     # newConnectionCallBack()
     def send_info(self, kind, info):
-        if info == "":
-            return 0
-        # assert self.__connected
         xtrace("%s [%s] %s %s" % (SOCKET_OUT, self.client.get_user_no(), kind, info))
-
         buf = info.encode()
         rest_size = len(buf)
         buf = struct.pack(HEAD_FORMAT, kind.encode(), rest_size) + buf
@@ -50,23 +44,32 @@ class UserProtocol(Protocol):
         for response in responses:
             self.send_info("RPL", response)
 
-    def ctl_client(self):
-        self.send_info("CTL", self.client.get_response())
+    def send_ctl_cmd(self, cmd):
+        cmd += '#'
+        self.send_info("CTL", cmd)
+
+    def send_ath_cmd(self):
+        self.send_info("ATH", "WHO ARE YOU")
+
+    def ctl_client(self, cmd, args):
+        if not self.client.set_ctl_status(cmd, args):
+            print(self.client.get_user_no() + "  is on remote task ")
+            return
+        self.send_ctl_cmd(cmd)
 
     def connectionMade(self):
         # 发送认证消息
-        self.send_info("ATH", "WHO ARE YOU")
-
-    # 当一个客户端连接关闭的时候
-    # clientCloseCallBack()
+        self.send_ath_cmd()
 
     def get_host(self):
         self.transport.getHost()
 
+    # 当一个客户端连接关闭的时候
+    # clientCloseCallBack()
     def connectionLost(self, reason):
         self.client.client_offline()
-        print("a connection closed" + str(self.client.get_user_no()))
-    #   self.factory.delete_client(self)
+        self.factory.delete_client(self.client.get_user_no())
+        print(self.client.get_user_no() + "  connection closed ")
 
     # clientReadCallBack()
     def dataReceived(self, data):
@@ -82,16 +85,19 @@ class UserProtocol(Protocol):
         result = self.client.process_cmd(cmd, cmd_info)
 
         # 业务逻辑处理完之后将处理结果发送给客户端
-        # if result == kProccessState.kRemoteCtl:
-        #    self.ctl_client()
-        # else:
-        self.reply_client()
+        if result == kProccessState.kUploadFile:
+            self.__user_socket.send_info("PAT", self.client.get_response())
+        else:
+            self.reply_client()
 
         # 根据处理结果做点事情
         # 如果处理结果是认证失败或需关闭与客户端连接
         if result == kProccessState.kAuthFail or result == kProccessState.kEndConnecion:
             self.end_connection()
-            # 成功写入关键字文件，需要network接口层发送文件
+        # 认证成功
+        elif result == kProccessState.kAuthSuccess:
+            self.factory.add_client(self)
+        # 成功写入关键字文件，需要network接口层发送文件
         elif result == kProccessState.kMakeKwSuccess:
             self.send_file(self.client.get_kw_filename())
 
@@ -146,6 +152,3 @@ class UserProtocol(Protocol):
             self.transfile_state = kTransFileState.kNoFile
 
         return True
-
-    def is_connected(self):
-        return self.transport.connected
