@@ -43,6 +43,7 @@ def erase_zombie_client(task_queue, exec_tasks):
 def download_file(sock, seq):
     user_no, file_hash, file_name, file_size, file_passwd, file_type, current_time, aes_status, file_path = UPLOAD_QUEUE.get(seq)
 
+    print("file_hash is ", file_hash)
     ori_file_name = file_name
     # 针对涉密文件，我们统一命名
     if file_type != FILE_TYPE.scan_data:
@@ -71,9 +72,9 @@ def download_file(sock, seq):
         set_file_inf(file_hash, FILE_KEEP_DIR, file_name, file_size, file_passwd)
         log_file_upload(user_no, ori_file_name, file_hash, current_time)
         if aes_status == FIRST_UPLOAD:
-            update_scan_data(file_name, file_hash, file_path)
+            update_scan_data(ori_file_name, file_hash, file_path)
         elif aes_status == SECOND_UPLOAD:
-            update_second_scan_data(file_name, file_hash, file_path)
+            update_second_scan_data(ori_file_name, file_hash, file_path)
 
     elif file_type == FILE_TYPE.scan_data:
         print("BEGIN PARSE SCAN_DATA")
