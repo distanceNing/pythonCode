@@ -98,7 +98,7 @@ class UserProtocol(Protocol):
             self.end_connection()
         # 认证成功
         elif result == kProccessState.kAuthSuccess:
-            self.factory.add_client(self)
+            self.factory.add_client(self.client.get_user_no(), self)
         # 成功写入关键字文件，需要network接口层发送文件
         elif result == kProccessState.kMakeKwSuccess:
             self.send_file(self.client.get_kw_filename())
