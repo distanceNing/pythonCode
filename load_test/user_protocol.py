@@ -67,6 +67,8 @@ class UserProtocol(Protocol):
     # 当一个客户端连接关闭的时候
     # clientCloseCallBack()
     def connectionLost(self, reason):
+        if self.client.process_state == kProccessState.kAuthing:
+            return
         self.client.client_offline()
         self.factory.delete_client(self.client.get_user_no())
         print(self.client.get_user_no() + "  connection closed ")

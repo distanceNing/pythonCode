@@ -1,6 +1,6 @@
 from threading import Thread
 
-from twisted.internet import reactor
+from twisted.internet import reactor, ssl
 from twisted.internet.protocol import Factory
 
 from BLL.close_conn import close_all_conn
@@ -68,11 +68,18 @@ class App:
         # 处理远程任务，包括任务的状态和提交结果
         Thread(target=remote_event_loop, daemon=True).start()
 
+        sslContext = ssl.DefaultOpenSSLContextFactory(
+            'CA/key.pem',  # 私钥
+            'CA/cert.crt',  # 公钥
+        )
+
         # 处理文件异步上传
         UploadQueue().start()
 
         # 服务启动时，初始化所有用户状态---未登录
         close_all_conn()
         # 监听服务
+        # ssl listen
+        # reactor.listenSSL(kPort, self.protocol_factory, sslContext)
         reactor.listenTCP(kPort, self.protocol_factory)
         reactor.run()
