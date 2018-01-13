@@ -142,6 +142,7 @@ def dal_get_first_file_info(uploadId):
 def dal_get_second_file_info(uploadId):
     db_str = "select filePath from secondScan where ssId={0};"
     db_str = db_str.format(uploadId)
+    print("sql sentence is", db_str)
     db_conn = DBMethods()
     ret = db_conn.selectMethods(db_str)
     return ret

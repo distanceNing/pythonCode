@@ -65,7 +65,7 @@ class CommandStatus:
     NEW_TASK = 5
     # working with monitor stuff
     BUSY = 6
-
+    ON_TASK = 7
     FreeState = [NO_TASK, ASSIGN_TASK, SUCCESS, FAILED]
     NeedWork = [NEW_TASK]
     TaskDone = [SUCCESS, FAILED]
@@ -142,16 +142,7 @@ def get_expired_time():
     return "2027-06-14 12:12:12"
 
 
-def kill_myself():
-    from sys import platform
-    from os import system, getpid
 
-    kill_str = {
-        'linux': "kill -9 {PID}",
-        'win32': "taskkill /f /pid {PID}"
-    }
-    shut_myself = kill_str[platform].format(getpid())
-    system(shut_myself)
 
 
 def cal_file_hash(file_path):

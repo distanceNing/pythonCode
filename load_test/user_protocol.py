@@ -12,10 +12,12 @@ from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log
 HEAD_FORMAT = "!3sI"
 HEAD_SIZE = 7
 
+
 class kTransFileState(Enum):
     kNeedFileHash = 10001
     kNoFile = 10002
     kSendFail = 10004
+
 
 # 这个类类似于muduo中的TcpConnection
 class UserProtocol(Protocol):
@@ -89,8 +91,12 @@ class UserProtocol(Protocol):
         # 业务逻辑处理完之后将处理结果发送给客户端
         if result == kProccessState.kUploadFile:
             self.__user_socket.send_info("PAT", self.client.get_response())
+        elif result == kProccessState.kCtlFail or result == kProccessState.kCtlSuccess \
+                or result == kProccessState.kNeedFileHash:
+            return
         else:
             self.reply_client()
+
 
         # 根据处理结果做点事情
         # 如果处理结果是认证失败或需关闭与客户端连接
@@ -112,9 +118,13 @@ class UserProtocol(Protocol):
             rpl, rest_pkt_size = struct.unpack(HEAD_FORMAT, recv_data[:HEAD_SIZE])
         except Exception as error:
             print(error)
-        cmd = rpl.decode()
-
-        cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size].decode()
+        cmd = None
+        cmd_info = None
+        try:
+            cmd = rpl.decode()
+            cmd_info = recv_data[HEAD_SIZE:HEAD_SIZE + rest_pkt_size].decode()
+        except:
+            print("decode error")
         return cmd, cmd_info
 
     def send_file(self, local_file, info=None):

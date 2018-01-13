@@ -44,6 +44,8 @@ class kProccessState(Enum):
 
     kRemoteCtl = 10020
     kUploadFile = 10021
+    kCtlSuccess = 10022
+    kCtlFail = 10023
 
 
 kOK = "OK"
@@ -61,7 +63,7 @@ class Client:
     def __init__(self, addr):
         self.__user_no = None
         self.__response = ""
-        self.__ctl_status = ""
+        self.__ctl_status = RemoteControl.CTL_NO_TASK
         self.user_addr = None
         self.process_state = kProccessState.kAuthing
         self.__kw_file = None
@@ -77,10 +79,12 @@ class Client:
         return self.__ctl_status
 
     def set_ctl_status(self, cmd, args):
-        if self.__ctl_status != RemoteControl.CTL_NO_TASK :
+        if self.__ctl_status != RemoteControl.CTL_NO_TASK:
             return False
+        GLOBAL_REMOTE_CONTROL[self.__user_no]['status'] = CommandStatus.ON_TASK
         self.__ctl_status = cmd
         self.__ctl_args = args
+        self.process_state = kProccessState.kRemoteCtl
         # 打印log
         log("GET-TASK args:", args)
         if cmd is RemoteControl.CTL_SCAN_FILES:
@@ -97,7 +101,7 @@ class Client:
             log("[UNINSTALL CLIENT] {ARGS}".format(ARGS=args))
         elif cmd is RemoteControl.CTL_SHUT_NETWORK:
             log("REMOTE-CMD: SHUT_NETWORK {ARGS}".format(ARGS=args))
-        return  True
+        return True
 
     def get_user_no(self):
         return self.__user_no
@@ -114,18 +118,23 @@ class Client:
             # 更新任务执行状态: 成功、失败、正在执行中
             if rst != RemoteControl.CTL_RPL_OK:
                 log("SECOND_SCAN_FILE %s FAILED" % self.__user_no)
+                self.process_state = kProccessState.kCtlSuccess
             else:
                 log("SECOND_SCAN_FILE %s OK" % self.__user_no)
+                self.process_state = kProccessState.kCtlFail
             GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
             GLOBAL_REMOTE_CONTROL[seq]['rst'] = rst
         elif cmd is RemoteControl.CTL_UPLOAD_SECOND or cmd is RemoteControl.CTL_UPLOAD_FIRST:
             if rst != RemoteControl.CTL_RPL_OK:
+                self.process_state = kProccessState.kCtlFail
                 if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                     log("UPLOAD_FIRST_SCAN_FILE %s FAILED" % self.__user_no)
                     update_scan_failed(self.__ctl_args)
                 elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
                     log("UPLOAD_SECOND_SCAN_FILE %s FAILED" % self.__user_no)
                     update_scan_second_failed(self.__ctl_args)
+            else:
+                self.process_state = kProccessState.kCtlSuccess
             if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                 log("UPLOAD_FIRST_SCAN_FILE %s OK" % self.__user_no)
             elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
@@ -135,6 +144,7 @@ class Client:
         elif cmd is RemoteControl.CTL_UNINSTALL:
             GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
             self.client_offline()
+            self.process_state=kProccessState.kCtlSuccess
         self.__ctl_status = RemoteControl.CTL_NO_TASK
 
     def auth(self, text):
@@ -299,9 +309,11 @@ class Client:
             self.current_time = get_curtime()
             self.recv_file(cmd_info)
         elif "INF" == cmd:
-            if self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+            print("arg is ")
+            if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                 self.__response = get_first_upload_file_info(self.__ctl_args)
             elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
+
                 self.__response = get_second_upload_file_info(self.__ctl_args)
             self.process_state = kProccessState.kUploadFile
         # 询问服务器时间和服务器过期时间
@@ -335,7 +347,7 @@ class Client:
         self.recv_file_type = MAP_TYPE.get(file_suffix, FILE_TYPE.confidential)
         # self.recv_file_info = file_info
         self.recv_file_path = file_info[0:-4]
-        print("[file_type] : " + str(self.recv_file_type))
+        # print("[file_type] : " + str(self.recv_file_type))
         self.process_state = kProccessState.kNeedFileHash
         # file_hash = user_socket.get_reply_info()[1]
 
@@ -343,7 +355,7 @@ class Client:
     # 因为hash保存在数据库中，对于“文件扫描结果”我们不保存它的哈希
     # 只是共用这个传输信道而已
     def check_upload_existed(self, file_hash, args):
-        self.process_state = kProccessState.kRecvFileHash
+        self.process_state = kProccessState.kNeedFileInfo
         if self.recv_file_type == FILE_TYPE.confidential:
             # 检查当前内容的文件是否已经保存在本地
             check_result = is_hash_here(file_hash)
@@ -370,6 +382,7 @@ class Client:
 
         # 通知客户端任务编号
         # 客户端通过比对服务器发送的最大任务长度，决定是否进行上传操作
+        from trans_file import LAST_TASK_ID
         global LAST_TASK_ID
 
         erase_zombie_client(UPLOAD_QUEUE, EXECUTING_QUEUE)

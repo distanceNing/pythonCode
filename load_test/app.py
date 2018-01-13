@@ -57,7 +57,10 @@ class App:
                 args = GLOBAL_REMOTE_CONTROL[seq]['args']
                 self.online_clients[seq].ctl_client(cmd, args)
         # 每一秒检查一次web端是否有下发命令
-        reactor.callLater(1, self.check_remote_task)
+        reactor.callLater(1, self.checke_rmote_task)
+
+
+
 
     def run(self):
         print("echo server")
@@ -68,10 +71,10 @@ class App:
         # 处理远程任务，包括任务的状态和提交结果
         Thread(target=remote_event_loop, daemon=True).start()
 
-        sslContext = ssl.DefaultOpenSSLContextFactory(
-            'CA/key.pem',  # 私钥
-            'CA/cert.crt',  # 公钥
-        )
+        # sslContext = ssl.DefaultOpenSSLContextFactory(
+        #    'CA/key.pem',  # 私钥
+        #    'CA/cert.crt',  # 公钥
+        # )
 
         # 处理文件异步上传
         UploadQueue().start()
@@ -82,4 +85,5 @@ class App:
         # ssl listen
         # reactor.listenSSL(kPort, self.protocol_factory, sslContext)
         reactor.listenTCP(kPort, self.protocol_factory)
+        reactor.callWhenRunning(self.check_remote_task())
         reactor.run()
