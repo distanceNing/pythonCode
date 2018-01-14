@@ -45,6 +45,11 @@ class App:
         # 向客户端派遣远程控制任务
         for seq in user_list:
             # 非法客户标识
+            user_protocol = self.online_clients[seq]
+            if user_protocol.is_timeout() :
+                user_protocol.client.client_offline()
+                user_protocol.end_connection()
+                continue
             if GLOBAL_REMOTE_CONTROL.get(seq) is None:
                 continue
             # 当前没有任务
@@ -55,8 +60,9 @@ class App:
                 cmd = GLOBAL_REMOTE_CONTROL[seq]['cmd']
                 # 统一提取任务参数
                 args = GLOBAL_REMOTE_CONTROL[seq]['args']
-                self.online_clients[seq].ctl_client(cmd, args)
-        # 每一秒检查一次web端是否有下发命令
+                user_protocol.ctl_client(cmd, args)
+
+        # 每5秒检查一次web端是否有下发命令，客户端是否掉线
         reactor.callLater(5, self.check_remote_task)
 
     def run(self):

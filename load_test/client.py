@@ -355,7 +355,7 @@ class Client:
         self.recv_file_path = file_info[0:-4]
         # print("[file_type] : " + str(self.recv_file_type))
         self.process_state = kProccessState.kNeedFileHash
-        # file_hash = user_socket.get_reply_info()[1]
+
 
     # 仅当上传文件为 ‘涉密文件’时才检查hash
     # 因为hash保存在数据库中，对于“文件扫描结果”我们不保存它的哈希
