@@ -202,6 +202,7 @@ class Client:
         elif not user_registed:
             self.__response = "NEED REGISTER"
             self.process_state = kProccessState.kNeedRegister
+            return
         # 用户身份不合法
         self.__response = "INVALID"
         return False
@@ -278,14 +279,15 @@ class Client:
                 self.check_upload_existed(cmd_info, self.recv_file_arg)
             elif self.process_state == kProccessState.kNeedFileInfo:
                 self.send_upload_num(cmd_info, self.recv_file_arg)
-            elif self.process_state == kProccessState.kNeedRegister:
-                # 注册成功
-                self.register(cmd_info)
         # 远程控制执行成功，更新状态位
         elif RemoteControl.CTL_RPL_OK == cmd or RemoteControl.CTL_RPL_FAILED == cmd:
             self.update_task_state(cmd, cmd_info)
         elif "ATH" == cmd:
-            self.auth(cmd_info)
+            if self.process_state == kProccessState.kNeedRegister:
+                # 注册成功
+                self.register(cmd_info)
+            else:
+                self.auth(cmd_info)
         elif "DNF" == cmd:
             self.send_keywords_file(cmd_info)
         elif "END" == cmd:
