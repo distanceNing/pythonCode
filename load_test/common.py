@@ -66,6 +66,7 @@ class CommandStatus:
     # working with monitor stuff
     BUSY = 6
     ON_TASK = 7
+
     FreeState = [NO_TASK, ASSIGN_TASK, SUCCESS, FAILED]
     NeedWork = [NEW_TASK]
     TaskDone = [SUCCESS, FAILED]

@@ -118,8 +118,11 @@ class Client:
             # 更新任务执行状态: 成功、失败、正在执行中
             if rst != RemoteControl.CTL_RPL_OK:
                 log("SECOND_SCAN_FILE %s FAILED" % self.__user_no)
-                self.process_state = kProccessState.kCtlSuccess
+
+                self.process_state = kProccessState.kCtlFail
+
             else:
+                self.process_state=kProccessState.kCtlSuccess
                 log("SECOND_SCAN_FILE %s OK" % self.__user_no)
                 self.process_state = kProccessState.kCtlFail
             GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
@@ -133,8 +136,10 @@ class Client:
                 elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
                     log("UPLOAD_SECOND_SCAN_FILE %s FAILED" % self.__user_no)
                     update_scan_second_failed(self.__ctl_args)
-            else:
-                self.process_state = kProccessState.kCtlSuccess
+
+            else :
+                self.process_state=kProccessState.kCtlSuccess
+
             if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                 log("UPLOAD_FIRST_SCAN_FILE %s OK" % self.__user_no)
             elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
@@ -309,7 +314,6 @@ class Client:
             self.current_time = get_curtime()
             self.recv_file(cmd_info)
         elif "INF" == cmd:
-            print("arg is ")
             if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                 self.__response = get_first_upload_file_info(self.__ctl_args)
             elif self.__ctl_status == RemoteControl.CTL_UPLOAD_SECOND:
@@ -356,18 +360,21 @@ class Client:
     # 只是共用这个传输信道而已
     def check_upload_existed(self, file_hash, args):
         self.process_state = kProccessState.kNeedFileInfo
+
+        self.recv_file_hash = file_hash
+
         if self.recv_file_type == FILE_TYPE.confidential:
             # 检查当前内容的文件是否已经保存在本地
-            check_result = is_hash_here(file_hash)
-            log("%s UPLOAD %s HASH %s" % (self.__user_no, self.recv_file_name, file_hash))
+            check_result = is_hash_here(self.recv_file_hash)
+            log("%s UPLOAD %s HASH %s" % (self.__user_no, self.recv_file_name, self.recv_file_hash))
             if check_result:
                 # send_info("RPL", , self.__user_no)
                 self.__response = "EXISTED"
-                log_file_upload(self.__user_no, self.recv_file_name, file_hash, self.current_time)
+                log_file_upload(self.__user_no, self.recv_file_name, self.recv_file_hash, self.current_time)
                 if args == FIRST_UPLOAD:
-                    update_scan_data(self.recv_file_name, file_hash, self.recv_file_path)
+                    update_scan_data(self.recv_file_name, self.recv_file_hash, self.recv_file_path)
                 elif args == SECOND_UPLOAD:
-                    update_second_scan_data(self.recv_file_name, file_hash, self.recv_file_path)
+                    update_second_scan_data(self.recv_file_name, self.recv_file_hash, self.recv_file_path)
                 return
         # 通知对方可以发送文件了
         self.__response = "BEGIN"

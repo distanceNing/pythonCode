@@ -6,7 +6,7 @@ def get_sql_settings():
 
         "db_name": "safeDb",
         "user": "root",
-        "passwd": "maria",
+        "passwd": "xaut.qll",
     }
     return sql_config
 
