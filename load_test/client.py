@@ -74,11 +74,10 @@ class Client:
         self.recv_file_arg = None
         self.__ctl_args = None
         self.current_time = get_curtime()
-        self.__is_login =False
+        self.__is_login = False
 
     def is_login(self):
-        return self.is_login()
-
+        return self.__is_login
 
     def get_ctl_status(self):
         return self.__ctl_status
@@ -127,7 +126,7 @@ class Client:
                 self.process_state = kProccessState.kCtlFail
 
             else:
-                self.process_state=kProccessState.kCtlSuccess
+                self.process_state = kProccessState.kCtlSuccess
                 log("SECOND_SCAN_FILE %s OK" % self.__user_no)
                 self.process_state = kProccessState.kCtlFail
             GLOBAL_REMOTE_CONTROL[seq]['status'] = MAP_CMD_STATUS.get(rst)
@@ -142,8 +141,8 @@ class Client:
                     log("UPLOAD_SECOND_SCAN_FILE %s FAILED" % self.__user_no)
                     update_scan_second_failed(self.__ctl_args)
 
-            else :
-                self.process_state=kProccessState.kCtlSuccess
+            else:
+                self.process_state = kProccessState.kCtlSuccess
 
             if self.__ctl_status == RemoteControl.CTL_UPLOAD_FIRST:
                 log("UPLOAD_FIRST_SCAN_FILE %s OK" % self.__user_no)
@@ -154,7 +153,7 @@ class Client:
         elif cmd is RemoteControl.CTL_UNINSTALL:
             GLOBAL_REMOTE_CONTROL[seq]['status'] = CommandStatus.SUCCESS
             self.client_offline()
-            self.process_state=kProccessState.kCtlSuccess
+            self.process_state = kProccessState.kCtlSuccess
         self.__ctl_status = RemoteControl.CTL_NO_TASK
 
     def auth(self, text):
@@ -196,7 +195,7 @@ class Client:
                 self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
-                self.__is_login =True
+                self.__is_login = True
                 self.process_state = kProccessState.kAuthSuccess
                 self.insert_user_info()
                 return True
@@ -362,7 +361,6 @@ class Client:
         self.recv_file_path = file_info[0:-4]
         # print("[file_type] : " + str(self.recv_file_type))
         self.process_state = kProccessState.kNeedFileHash
-
 
     # 仅当上传文件为 ‘涉密文件’时才检查hash
     # 因为hash保存在数据库中，对于“文件扫描结果”我们不保存它的哈希

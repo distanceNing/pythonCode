@@ -42,14 +42,16 @@ class App:
 
     def check_remote_task(self):
         user_list = self.online_clients.keys()
+        invaild_clients = []
         # 向客户端派遣远程控制任务
         for seq in user_list:
-            # 非法客户标识
             user_protocol = self.online_clients[seq]
+            # 检查客户端是否超时掉线
             if user_protocol.is_timeout():
-                user_protocol.client.client_offline()
-                user_protocol.end_connection()
+                # 记录掉线的客户，在map遍历完之后进行处理
+                invaild_clients.append(seq)
                 continue
+            # 非法客户标识
             if GLOBAL_REMOTE_CONTROL.get(seq) is None:
                 continue
             # 当前没有任务
@@ -62,6 +64,8 @@ class App:
                 args = GLOBAL_REMOTE_CONTROL[seq]['args']
                 user_protocol.ctl_client(cmd, args)
 
+        for user in invaild_clients:
+            self.online_clients[user].end_connection()
         # 每5秒检查一次web端是否有下发命令，客户端是否掉线
         reactor.callLater(5, self.check_remote_task)
 
@@ -89,6 +93,6 @@ class App:
         # 监听服务
         # ssl listen
         # reactor.listenSSL(kPort, self.protocol_factory, sslContext)
-        reactor.callWhenRunning(self.check_remote_task)
-        reactor.listenTCP(kPort, self.protocol_factory)
+        #reactor.callWhenRunning(self.check_remote_task)
+        #reactor.listenTCP(kPort, self.protocol_factory)
         reactor.run()
