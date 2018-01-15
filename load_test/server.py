@@ -1,6 +1,7 @@
 from threading import Thread
+import ssl
 
-from twisted.internet import reactor
+from twisted.internet import reactor, ssl
 from twisted.internet.protocol import Factory
 
 from BLL.close_conn import close_all_conn
@@ -28,7 +29,7 @@ class UserProtocolFactory(Factory):
         self.the_app.delete_client(user_no)
 
 
-class App:
+class Server:
     def __init__(self):
         self.online_clients = {}
         self.protocol_factory = UserProtocolFactory(self)
@@ -41,10 +42,10 @@ class App:
             self.online_clients.pop(user_no)
 
     def check_remote_task(self):
-        user_list = self.online_clients.keys()
-        invaild_clients = []
         # 向客户端派遣远程控制任务
-        for seq in user_list:
+        invaild_clients = []
+        for seq in self.online_clients.keys():
+            # 非法客户标识
             user_protocol = self.online_clients[seq]
             # 检查客户端是否超时掉线
             if user_protocol.is_timeout():
@@ -70,7 +71,6 @@ class App:
         reactor.callLater(5, self.check_remote_task)
 
     def run(self):
-        print("echo server")
         log("SERVER UP")
         # 接受Web控制指令
         Thread(target=socket_method().run, daemon=True).start()
@@ -78,12 +78,10 @@ class App:
         # 处理远程任务，包括任务的状态和提交结果
         Thread(target=remote_event_loop, daemon=True).start()
 
-        '''
         sslContext = ssl.DefaultOpenSSLContextFactory(
             'CA/key.pem',  # 私钥
-            'CA/cert.crt',  # 公钥
+            'CA/cert.pem',  # 公钥
         )
-        '''
 
         # 处理文件异步上传
         UploadQueue().start()
@@ -91,8 +89,9 @@ class App:
         # 服务启动时，初始化所有用户状态---未登录
         close_all_conn()
         # 监听服务
-        # ssl listen
-        # reactor.listenSSL(kPort, self.protocol_factory, sslContext)
-        #reactor.callWhenRunning(self.check_remote_task)
-        #reactor.listenTCP(kPort, self.protocol_factory)
+
+        reactor.listenSSL(kPort, self.protocol_factory, sslContext)
+        reactor.callWhenRunning(self.check_remote_task)
+
+        # reactor.listenTCP(kPort, self.protocol_factory)
         reactor.run()

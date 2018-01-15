@@ -8,7 +8,7 @@ from twisted.internet.protocol import Protocol
 from client import kProccessState
 from client import Client
 from common import MAX_PACKET_SIZE, cal_file_hash
-from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log, get_curtime
+from mylog import xtrace, SOCKET_OUT, SOCKET_IN, log
 
 HEAD_FORMAT = "!3sI"
 HEAD_SIZE = 7
@@ -20,7 +20,7 @@ class kTransFileState(Enum):
     kSendFail = 10004
 
 
-kTimeout = 10
+kTimeout = 15
 
 
 # 这个类类似于muduo中的TcpConnection
@@ -30,7 +30,7 @@ class UserProtocol(Protocol):
         self.client = Client(addr)
         self.transfile_state = kTransFileState.kNoFile
         self.recv_file_name = None
-        self.last_data_arrival_time = datetime.datetime.now()
+        self.last_data_arrival_time = datetime.now()
 
     # 主动关闭套接字
     def end_connection(self):
@@ -38,8 +38,8 @@ class UserProtocol(Protocol):
         self.factory.delete_client(self.client.get_user_no())
 
     def is_timeout(self):
-        now = datetime.datetime.now()
-        pass_time = self.last_data_arrival_time - now
+        now = datetime.now()
+        pass_time = now - self.last_data_arrival_time 
         return pass_time.seconds >= kTimeout
 
     # 当一个客户端连接到来的时候
@@ -79,18 +79,19 @@ class UserProtocol(Protocol):
     # 当一个客户端连接关闭的时候
     # clientCloseCallBack()
     def connectionLost(self, reason):
-        print(self.client.get_user_no() + "  connection closed ")
+
+        print(str(self.client.get_user_no()) + "  connection closed ")
+
         try:
             if self.client.is_login():
                 self.client.client_offline()
                 self.factory.delete_client(self.client.get_user_no())
         except Exception as error:
             print(error)
-
     # clientReadCallBack()
     def dataReceived(self, data):
         print(data)
-        self.last_data_arrival_time = datetime.datetime.now()
+        self.last_data_arrival_time = datetime.now()
         # 定义一个状态机来做协议解析
         cmd, cmd_info = self.do_parse_request(data)
         xtrace("%s [%s] %s %s" % (SOCKET_IN, self.client.get_user_no(), cmd, cmd_info))

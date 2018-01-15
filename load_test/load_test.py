@@ -2,7 +2,7 @@ import signal
 
 from twisted.internet import reactor
 
-from app import App
+from server import Server
 
 def kill_myself(signum, frame):
     from os import system, getpid
@@ -22,5 +22,5 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, kill_myself)
     signal.signal(signal.SIGTERM, kill_myself)
     # 加载配置文件
-    the_app = App()
-    the_app.run()
+    server = Server()
+    server.run()
