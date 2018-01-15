@@ -77,7 +77,7 @@ class Client:
         self.__is_login =False
 
     def is_login(self):
-        return self.is_login()
+        return self.__is_login
 
 
     def get_ctl_status(self):
