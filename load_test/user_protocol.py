@@ -40,7 +40,7 @@ class UserProtocol(Protocol):
     def is_timeout(self):
         now = datetime.datetime.now()
         pass_time = self.last_data_arrival_time - now
-        return  pass_time.seconds >= kTimeout
+        return pass_time.seconds >= kTimeout
 
     # 当一个客户端连接到来的时候
     # newConnectionCallBack()
@@ -79,10 +79,9 @@ class UserProtocol(Protocol):
     # 当一个客户端连接关闭的时候
     # clientCloseCallBack()
     def connectionLost(self, reason):
-        if self.client.process_state == kProccessState.kAuthing:
-            return
-        self.client.client_offline()
-        self.factory.delete_client(self.client.get_user_no())
+        if self.client.is_login():
+            self.client.client_offline()
+            self.factory.delete_client(self.client.get_user_no())
         print(self.client.get_user_no() + "  connection closed ")
 
     # clientReadCallBack()

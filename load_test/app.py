@@ -46,7 +46,7 @@ class App:
         for seq in user_list:
             # 非法客户标识
             user_protocol = self.online_clients[seq]
-            if user_protocol.is_timeout() :
+            if user_protocol.is_timeout():
                 user_protocol.client.client_offline()
                 user_protocol.end_connection()
                 continue
@@ -80,7 +80,6 @@ class App:
             'CA/cert.crt',  # 公钥
         )
         '''
-
 
         # 处理文件异步上传
         UploadQueue().start()

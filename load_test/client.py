@@ -74,6 +74,11 @@ class Client:
         self.recv_file_arg = None
         self.__ctl_args = None
         self.current_time = get_curtime()
+        self.__is_login =False
+
+    def is_login(self):
+        return self.is_login()
+
 
     def get_ctl_status(self):
         return self.__ctl_status
@@ -191,6 +196,7 @@ class Client:
                 self.__response += "\n"
                 self.__response += UploadServerConfig
                 # 登录成功，保存用户身份
+                self.__is_login =True
                 self.process_state = kProccessState.kAuthSuccess
                 self.insert_user_info()
                 return True
@@ -215,6 +221,7 @@ class Client:
             self.__response += UploadServerConfig
             self.insert_user_info()
             self.process_state = kProccessState.kAuthSuccess
+            self.__is_login = True
             return True
         else:
             self.__response = kFail
