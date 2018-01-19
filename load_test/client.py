@@ -280,6 +280,7 @@ class Client:
         log("%s %s OFFLINE" % (self.__user_no, self.user_addr))
         remove_from_alive(self.get_user_no())
         close_conn(self.get_user_no())
+        self.__is_login = False
         self.process_state = kProccessState.kEndConnecion
 
     def process_cmd(self, cmd, cmd_info):

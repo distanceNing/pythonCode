@@ -34,6 +34,7 @@ class UserProtocol(Protocol):
 
     # 主动关闭套接字
     def end_connection(self):
+        self.client.client_offline()
         self.transport.loseConnection()
         self.factory.delete_client(self.client.get_user_no())
 
@@ -91,7 +92,7 @@ class UserProtocol(Protocol):
             print(error)
     # clientReadCallBack()
     def dataReceived(self, data):
-        print(data)
+        #print(data)
         self.last_data_arrival_time = datetime.now()
         # 定义一个状态机来做协议解析
         cmd, cmd_info = self.do_parse_request(data)
