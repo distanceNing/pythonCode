@@ -5,7 +5,7 @@ SCAN_RESULT = 1
 SECOND_RESULT = 2
 
 from DAL.select import dal_get_userId
-from DAL.update import DAL_update_user_scan_status, DAL_update_user_upload_status
+from DAL.update import DAL_update_user_scan_status, DAL_update_user_first_upload_status, DAL_update_user_second_upload_status
 from DAL.insert import insert_sacn_data, insert_local_scan_data, insert_second_scan_data
 from mylog import xtrace, log, error_log
 
@@ -21,7 +21,8 @@ def init_scan_status(userNo):
 # 数据接口---重置用户的上传文件状态
 def update_user_upload_status(userNo):
     userId = dal_get_userId(userNo)[0][0]
-    DAL_update_user_upload_status(userId, 0)
+    DAL_update_user_first_upload_status(userId, 0)
+    DAL_update_user_second_upload_status(userId, 0)
     return True
 
 

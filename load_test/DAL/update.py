@@ -26,11 +26,20 @@ def DAL_update_user_scan_status(user_id, status):
     ret = db.updateMethods(dbStr)
     return ret
 
-# 重置用户文件上传状态
-def DAL_update_user_upload_status(user_id, status):
+# 重置用户第一次扫描文件上传状态
+def DAL_update_user_first_upload_status(user_id, status):
     db = DBMethods()
     values = (status, user_id)
     dbStr = 'update userScan set uploadStatus="%s" where userId="%s" and uploadStatus=1;'
+    dbStr = dbStr % values
+    ret = db.updateMethods(dbStr)
+    return ret
+
+# 重置用户第二次扫描文件上传状态
+def DAL_update_user_second_upload_status(user_id, status):
+    db = DBMethods()
+    values = (status, user_id)
+    dbStr = 'update secondScan set uploadStatus="%s" where userId="%s" and uploadStatus=1;'
     dbStr = dbStr % values
     ret = db.updateMethods(dbStr)
     return ret

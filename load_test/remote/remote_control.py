@@ -4,7 +4,7 @@
 import time
 import threading
 from mylog import log
-from .commit import commit_scan_files, init_scan_status
+from .commit import commit_scan_files, init_scan_status, update_user_upload_status
 from .config import RemoteControl, CommandStatus
 from .parse_scan_data import parse_scan_files
 
@@ -35,6 +35,7 @@ def insert_2alive_list(seq):
 
     # 初始化用户扫描状态
     init_scan_status(seq)
+    update_user_upload_status(seq)
 
     return True
 

@@ -57,7 +57,8 @@ class UserProtocol(Protocol):
             self.send_info("RPL", response)
 
     def send_ctl_cmd(self, cmd):
-        cmd += '#'
+        self.s = '#'
+        cmd += self.s
         self.send_info("CTL", cmd)
 
     def send_ath_cmd(self):
